@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Type play</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全能散点与波普艺术生成器</title>
+    <style>
+        /* 锁定整体结构与面板底色 */
+        :root { --primary: #4646ff; --bg: #efefef; --panel: #eefacc; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); display: flex; flex-direction: column; height: 100vh; color: #222; }
+        .main { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 360px; background: var(--panel); padding: 25px; overflow-y: auto; border-right: 1px solid #e1e4e8; display: flex; flex-direction: column; gap: 18px; z-index: 10; }
+
+        /* 增加 overflow: hidden 保证缩放计算准确 */
+        .preview { flex: 1; padding: 30px; display: flex; justify-content: center; align-items: center; background: transparent; position: relative; overflow: hidden; }
+        canvas { background: #ffffff; max-width: 100%; max-height: 100%; }
+        
+        .original-preview-box { background: #000000; border: none; height: 160px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; }
+        .original-preview-box span { color: #ffffff; font-size: 13px; }
+        .original-preview-box img { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+
+        .control-group { background: #f8f9fa; padding: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 6px; }
+        .control-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+        
+        .val { color: #000; font-family: monospace; font-size: 14px; font-weight: bold; }
+        
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 6px; background: #dcdfe6; outline: none; margin-top: 6px; border-radius: 0; transition: background 0.1s; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: #111; cursor: pointer; border-radius: 50%; border: none; }
+        
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #dcdfe6;
+            border-radius: 0;
+            background: #fff;
+            outline: none;
+            font-size: 13px;
+            margin-top: 6px;
+            cursor: pointer;
+            color: #222;
+        }
+
+        #colorBg { 
+            -webkit-appearance: none; 
+            -moz-appearance: none;
+            appearance: none;
+            width: 16px; 
+            height: 16px; 
+            padding: 0; 
+            border: none; 
+            cursor: pointer; 
+            background: transparent; 
+        }
+        #colorBg::-webkit-color-swatch-wrapper { padding: 0; }
+        #colorBg::-webkit-color-swatch { border: 1px solid #999; border-radius: 50%; box-sizing: border-box; } 
+        #colorBg::-moz-color-swatch { border: 1px solid #999; border-radius: 50%; box-sizing: border-box; } 
+        
+        .btn { background: #111; color: white; border: none; padding: 12px; font-size: 14px; font-weight: normal; cursor: pointer; transition: 0.2s; text-align: center; border-radius: 0; }
+        .btn:hover { background: #333; }
+        
+        .btn-clear { background: transparent; border: none; color: #666; font-size: 13px; padding: 0; cursor: pointer; transition: 0.2s; }
+        .btn-clear:hover { color: #111; text-decoration: none; } 
+        
+        input[type="file"] { display: none; }
+        .download-row { display: flex; gap: 8px; margin-top: 5px; }
+        .download-row .btn { flex: 1; padding: 10px 0; }
+        
+        .footer-text { margin-top: auto; font-size: 12px; color: #999; text-align: center; padding-top: 10px; font-weight: 300; }
+    </style>
+</head>
+<body>
+<div class="main">
+    <div class="sidebar">
+        <!-- 图像预览区 -->
+        <div class="original-preview-box" id="previewBox">
+            <span id="origPreviewHint">Image Preview</span>
+            <img id="origImagePreview" src="" alt="原图预览">
+        </div>
+
+        <button class="btn" onclick="document.getElementById('imageUpload').click()">上传图片 / Upload Image</button>
+        <input type="file" id="imageUpload" accept="image/*">
+
+        <!-- 满屏画布切换组件 + 画布背景色 -->
+        <div class="control-group">
+            <div class="control-header" style="align-items: center;">
+                <label>画布尺寸 Canvas Size</label>
+                <!-- 画纸背景色 -->
+                <div style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <span style="font-size: 12px; font-weight: bold; color: #444;">BG</span>
+                    <input type="color" id="colorBg" value="#ffffff">
+                </div>
+            </div>
+            <select id="canvasFormat">
+                <option value="default">固定比例 (3:4)</option>
+                <option value="fullscreen" selected>满屏画布 (Fit Screen)</option>
+            </select>
+        </div>
+
+        <!-- 波普散点风格的控制组件 -->
+        <div class="control-group">
+            <div class="control-header"><label>排列方式 Layout</label></div>
+            <select id="layoutMode">
+                <option value="scatter">随机散布</option>
+                <option value="grid" selected>网格阵列</option>
+            </select>
+            
+            <div class="control-header" style="margin-top: 15px;"><label>渲染风格 Style</label></div>
+            <select id="dotStyle">
+                <option value="concentric" selected>多层同心圆 (康定斯基风)</option>
+                <option value="dual_solid">双层靶心 (实心/线框)</option>
+                <option value="solid">单层纯实心 (经典波普)</option>
+            </select>
+            
+            <div class="control-header" style="margin-top: 15px;"><label>色彩模式 Color</label></div>
+            <select id="colorMode">
+                <option value="pop_art" selected>波普复古色卡</option>
+                <option value="random">随机鲜艳色</option>
+                <!-- 显示为“莫兰迪色彩”，保留之前的对撞色彩逻辑 -->
+                <option value="morandi">莫兰迪色彩</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <div class="control-header"><label>圆点大小 (饱满度)</label><span class="val" id="dotSizeVal">20</span></div>
+            <input type="range" id="dotSize" min="2" max="40" value="20">
+            
+            <div class="control-header" style="margin-top: 15px;"><label>网格间距 (密度)</label><span class="val" id="densityVal">35</span></div>
+            <input type="range" id="density" min="10" max="80" value="35">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header" style="align-items: center;">
+                <label>导出 Export</label>
+                <button class="btn-clear" onclick="clearCanvas()">Clear</button>
+            </div>
+            <div class="download-row">
+                <button class="btn" onclick="downloadImage('jpg')">JPG</button>
+                <button class="btn" onclick="downloadImage('png')">PNG</button>
+                <button class="btn" onclick="downloadImage('svg')">SVG</button>
+            </div>
+        </div>
+
+        <!-- 底部版权文字 -->
+        <div class="footer-text">2026 ©Design by Type Play Studio</div>
+    </div>
+
+    <div class="preview">
+        <!-- 默认显示的画布 -->
+        <canvas id="canvas"></canvas>
+    </div>
+</div>
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let originalImage = new Image();
+
+    // 波普/康定斯基复古调色盘
+    const popArtPalette = [
+        '219, 58, 52', '46, 134, 193', '241, 196, 15', '39, 174, 96', 
+        '230, 126, 34', '142, 68, 173', '20, 20, 20', '224, 224, 224', 
+        '93, 64, 55', '244, 143, 177'
+    ];
+
+    // 新增：提取自参考图的莫兰迪色系（复古高对比度对撞色彩库）
+    const morandiPalette = [
+        '237, 100, 138', '165, 199, 203', // 粉红 / 灰水蓝
+        '246, 183, 186', '237, 104, 72',  // 浅绯 / 橘红
+        '7, 59, 76',     '243, 154, 37',  // 藏蓝 / 亮橘黄
+        '154, 180, 162', '134, 138, 72',  // 鼠尾草 / 橄榄绿
+        '249, 200, 203', '137, 72, 48',   // 浅脏粉 / 棕褐
+        '187, 214, 130', '6, 131, 117',   // 嫩芽绿 / 深青绿
+        '105, 121, 188', '252, 208, 143', // 灰蓝紫 / 奶油橘
+        '49, 94, 68',    '157, 190, 209'  // 森林绿 / 雾霾蓝
+    ];
+
+    const params = {
+        canvasFormat: document.getElementById('canvasFormat'),
+        layoutMode: document.getElementById('layoutMode'),
+        dotStyle: document.getElementById('dotStyle'),
+        colorMode: document.getElementById('colorMode'),
+        dotSize: document.getElementById('dotSize'),
+        density: document.getElementById('density'),
+        colorBg: document.getElementById('colorBg')
+    };
+
+    function resizeCanvas() {
+        const format = params.canvasFormat.value;
+        const previewEl = document.querySelector('.preview');
+        
+        if (format === 'fullscreen') {
+            previewEl.style.padding = '0';
+            canvas.style.display = 'none';
+            const rect = previewEl.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            canvas.style.display = ''; 
+        } else {
+            previewEl.style.padding = '30px';
+            canvas.width = 600;
+            canvas.height = 800;
+        }
+        
+        ctx.fillStyle = params.colorBg.value || '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        if (originalImage.src) {
+            clearTimeout(window.renderTimeout);
+            window.renderTimeout = setTimeout(renderEffect, 20);
+        }
+    }
+
+    window.addEventListener('resize', () => {
+        if (params.canvasFormat.value === 'fullscreen') {
+            clearTimeout(window.resizeTimeout);
+            window.resizeTimeout = setTimeout(resizeCanvas, 100);
+        }
+    });
+
+    resizeCanvas();
+
+    function hslToRgbString(h, s, l) {
+        s /= 100; l /= 100;
+        const k = n => (n + h / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+        return `${Math.round(255 * f(0))}, ${Math.round(255 * f(8))}, ${Math.round(255 * f(4))}`;
+    }
+
+    function getSubjectColor(imgElement) {
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        const size = 64; 
+        tempCanvas.width = size;
+        tempCanvas.height = size;
+        tempCtx.drawImage(imgElement, 0, 0, size, size);
+        
+        const data = tempCtx.getImageData(0, 0, size, size).data;
+        const colorCounts = {};
+        const edgeCounts = {};
+        let maxEdgeCount = 0;
+        let bgKey = '';
+
+        const quantize = (c) => Math.round(c / 16) * 16;
+        const getKey = (r, g, b) => `${quantize(r)},${quantize(g)},${quantize(b)}`;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (x === 0 || x === size - 1 || y === 0 || y === size - 1) {
+                    const i = (y * size + x) * 4;
+                    if (data[i + 3] < 128) continue; 
+                    const key = getKey(data[i], data[i+1], data[i+2]);
+                    edgeCounts[key] = (edgeCounts[key] || 0) + 1;
+                    if (edgeCounts[key] > maxEdgeCount) {
+                        maxEdgeCount = edgeCounts[key];
+                        bgKey = key;
+                    }
+                }
+            }
+        }
+
+        const colorDist = (k1, r, g, b) => {
+            if (!k1) return 999;
+            const p1 = k1.split(',').map(Number);
+            return Math.abs(p1[0]-r) + Math.abs(p1[1]-g) + Math.abs(p1[2]-b);
+        };
+
+        let maxSubjectCount = 0;
+        let subjectColor = '';
+        let fallbackMaxCount = 0;
+        let fallbackColor = '#000000';
+
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] < 128) continue;
+            const r = data[i], g = data[i+1], b = data[i+2];
+            const key = getKey(r, g, b);
+
+            colorCounts[key] = (colorCounts[key] || 0) + 1;
+            if (colorCounts[key] > fallbackMaxCount) {
+                fallbackMaxCount = colorCounts[key];
+                fallbackColor = `rgb(${quantize(r)}, ${quantize(g)}, ${quantize(b)})`;
+            }
+
+            if (bgKey && colorDist(bgKey, r, g, b) < 60) continue;
+
+            if (colorCounts[key] > maxSubjectCount) {
+                maxSubjectCount = colorCounts[key];
+                subjectColor = `rgb(${quantize(r)}, ${quantize(g)}, ${quantize(b)})`;
+            }
+        }
+        return subjectColor || fallbackColor || '#000000';
+    }
+
+    function updateSliderTrack(el) {
+        const min = parseFloat(el.min) || 0;
+        const max = parseFloat(el.max) || 100;
+        const val = parseFloat(el.value);
+        const percent = ((val - min) / (max - min)) * 100;
+        el.style.background = `linear-gradient(to right, #111 ${percent}%, #dcdfe6 ${percent}%)`;
+    }
+
+    Object.keys(params).forEach(key => {
+        const el = params[key];
+        if(el.type === 'range') {
+            updateSliderTrack(el);
+        }
+        
+        const triggerRender = (e) => {
+            // 单独处理画布大小的改变
+            if (e.target.id === 'canvasFormat') {
+                resizeCanvas();
+                return;
+            }
+
+            if(e.target.type === 'range') {
+                document.getElementById(key + 'Val').innerText = e.target.value;
+                updateSliderTrack(e.target);
+            }
+            if(originalImage.src) {
+                clearTimeout(window.renderTimeout);
+                window.renderTimeout = setTimeout(renderEffect, 20);
+            } else if (e.target.id === 'colorBg') {
+                ctx.fillStyle = e.target.value;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        };
+
+        el.addEventListener('input', triggerRender);
+        if(el.tagName === 'SELECT') {
+            el.addEventListener('change', triggerRender);
+        }
+    });
+
+    document.getElementById('imageUpload').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            originalImage.onload = () => {
+                document.getElementById('origPreviewHint').style.display = 'none';
+                const previewImg = document.getElementById('origImagePreview');
+                previewImg.src = event.target.result;
+                previewImg.style.display = 'block';
+                
+                document.getElementById('previewBox').style.background = getSubjectColor(originalImage);
+                renderEffect();
+            };
+            originalImage.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function clearCanvas() {
+        originalImage.removeAttribute('src');
+        document.getElementById('imageUpload').value = '';
+        document.getElementById('origPreviewHint').style.display = 'block';
+        document.getElementById('previewBox').style.background = '#000000';
+        
+        const previewImg = document.getElementById('origImagePreview');
+        previewImg.removeAttribute('src');
+        previewImg.style.display = 'none';
+        
+        resizeCanvas();
+        clearTimeout(window.renderTimeout);
+    }
+
+    // 核心绘制逻辑抽离：支持跨浏览器无损导出高清A3画质及SVG格式，兼容Mac Safari/Chrome
+    function generateArt(targetCtx, targetW, targetH, isTransparent, returnSvg = false) {
+        // 固定以显示界面的画布尺寸进行像素采样，极大降低内存占用，保证各类浏览器流程运行不死机
+        const previewW = canvas.width;
+        const previewH = canvas.height;
+        const exportScale = targetW / previewW;
+        
+        let svgStr = '';
+        if (returnSvg) {
+            svgStr += `<svg xmlns="http://www.w3.org/2000/svg" width="${targetW}" height="${targetH}">`;
+            if (!isTransparent) {
+                svgStr += `<rect width="100%" height="100%" fill="${params.colorBg.value || '#ffffff'}" />`;
+            }
+        } else {
+            if (!isTransparent) {
+                targetCtx.fillStyle = params.colorBg.value || '#ffffff';
+                targetCtx.fillRect(0, 0, targetW, targetH);
+            } else {
+                targetCtx.clearRect(0, 0, targetW, targetH);
+            }
+            targetCtx.globalCompositeOperation = 'source-over';
+        }
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = previewW; 
+        offCanvas.height = previewH;
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+        
+        offCtx.fillStyle = '#ffffff';
+        offCtx.fillRect(0, 0, previewW, previewH);
+
+        const imgScale = Math.min(previewW / originalImage.width, previewH / originalImage.height);
+        const drawW = originalImage.width * imgScale;
+        const drawH = originalImage.height * imgScale;
+        const drawX = (previewW - drawW) / 2;
+        const drawY = (previewH - drawH) / 2;
+        offCtx.drawImage(originalImage, drawX, drawY, drawW, drawH);
+
+        const data = offCtx.getImageData(0, 0, previewW, previewH).data;
+
+        // 统一计算缩放比例基准点，保证任意画布大小下图形效果视觉绝对一致
+        const baseImgScale = Math.min(600 / originalImage.width, 800 / originalImage.height);
+        const scaleRatio = imgScale / baseImgScale;
+
+        const step = parseFloat(params.density.value) * scaleRatio;
+        const baseDotSize = parseFloat(params.dotSize.value) * scaleRatio;
+        
+        const threshold = 240;
+        const maxSafeRadius = step / 2;
+
+        const layoutMode = params.layoutMode.value;
+        const dotStyle = params.dotStyle.value;
+        const colorMode = params.colorMode.value;
+
+        const startX = drawX % step;
+        const startY = drawY % step;
+
+        for (let y = startY; y < previewH; y += step) {
+            for (let x = startX; x < previewW; x += step) {
+                const px = Math.floor(x);
+                const py = Math.floor(y);
+                
+                if (px < 0 || px >= previewW || py < 0 || py >= previewH) continue;
+
+                const index = (py * previewW + px) * 4;
+                const r = data[index];
+                const g = data[index + 1];
+                const b = data[index + 2];
+                
+                const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+                if (brightness > threshold) continue;
+
+                // 强制固定的伪随机种子，在满屏和固定比例间切换时色彩完全一致
+                const logicalX = Math.round((x - drawX) / step);
+                const logicalY = Math.round((y - drawY) / step);
+                let prngSeed = (logicalX * 374761393) ^ (logicalY * 668265263) ^ 0x1A2B3C4D;
+                const rand = () => {
+                    let t = prngSeed += 0x6D2B79F5;
+                    t = Math.imul(t ^ (t >>> 15), t | 1);
+                    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+                };
+
+                let shouldDraw = false;
+                if (layoutMode === 'scatter') {
+                    if (rand() < ((255 - brightness) / 255)) shouldDraw = true;
+                } else {
+                    shouldDraw = true; 
+                }
+
+                if (shouldDraw) {
+                    let coreRGB, haloRGB;
+                    if (colorMode === 'pop_art') {
+                        coreRGB = popArtPalette[Math.floor(rand() * popArtPalette.length)];
+                        do {
+                            haloRGB = popArtPalette[Math.floor(rand() * popArtPalette.length)];
+                        } while (haloRGB === coreRGB); 
+                    } else if (colorMode === 'random') {
+                        const hue1 = Math.floor(rand() * 360);
+                        const hue2 = (hue1 + 180 + rand()*90) % 360; 
+                        coreRGB = hslToRgbString(hue1, 90, 50);
+                        haloRGB = hslToRgbString(hue2, 90, 50);
+                    } else if (colorMode === 'morandi') {
+                        // 莫兰迪对撞色彩，从预设的16个优质色彩中提取
+                        coreRGB = morandiPalette[Math.floor(rand() * morandiPalette.length)];
+                        do {
+                            haloRGB = morandiPalette[Math.floor(rand() * morandiPalette.length)];
+                        } while (haloRGB === coreRGB); 
+                    } else {
+                        coreRGB = `${r}, ${g}, ${b}`;
+                        haloRGB = `${r}, ${g}, ${b}`; 
+                    }
+
+                    let outerRadius = baseDotSize;
+                    if (dotStyle === 'dual_solid') outerRadius = baseDotSize * 1.5;
+                    if (outerRadius > maxSafeRadius) outerRadius = maxSafeRadius;
+                    
+                    let dotX = x + step / 2;
+                    let dotY = y + step / 2;
+                    
+                    if (layoutMode === 'scatter') {
+                        let maxJitter = (step / 2) - outerRadius;
+                        if (maxJitter < 0) maxJitter = 0; 
+                        dotX += (rand() * 2 - 1) * maxJitter;
+                        dotY += (rand() * 2 - 1) * maxJitter;
+                    }
+
+                    // ====== 真实输出的高清坐标与半径计算 ======
+                    const finalX = dotX * exportScale;
+                    const finalY = dotY * exportScale;
+                    const finalOuterRadius = outerRadius * exportScale;
+
+                    const cx = finalX.toFixed(2);
+                    const cy = finalY.toFixed(2);
+
+                    if (dotStyle === 'concentric') {
+                        const ringsCount = 5; 
+                        let ringColors = [];
+                        let prevColor = null;
+
+                        for(let i=0; i<ringsCount; i++) {
+                            let c;
+                            if (colorMode === 'pop_art') {
+                                do { c = popArtPalette[Math.floor(rand() * popArtPalette.length)]; } while (c === prevColor);
+                            } else if (colorMode === 'random') {
+                                c = hslToRgbString(Math.floor(rand() * 360), 90, 50);
+                            } else if (colorMode === 'morandi') {
+                                do { c = morandiPalette[Math.floor(rand() * morandiPalette.length)]; } while (c === prevColor);
+                            } else {
+                                c = (i % 2 === 0) ? `${r}, ${g}, ${b}` : '240, 240, 240'; 
+                            }
+                            ringColors.push(c);
+                            prevColor = c;
+                        }
+
+                        for (let i = 0; i < ringsCount; i++) {
+                            const currentRadius = finalOuterRadius * (1 - (i / ringsCount));
+                            if (currentRadius <= 0.5) continue; 
+
+                            if (returnSvg) {
+                                svgStr += `<circle cx="${cx}" cy="${cy}" r="${currentRadius.toFixed(2)}" fill="rgb(${ringColors[i]})" />`;
+                            } else {
+                                targetCtx.fillStyle = `rgb(${ringColors[i]})`;
+                                targetCtx.beginPath();
+                                targetCtx.arc(finalX, finalY, currentRadius, 0, Math.PI * 2);
+                                targetCtx.fill();
+                            }
+                        }
+
+                    } else if (dotStyle === 'dual_solid') {
+                        let innerRadius = finalOuterRadius * (0.7 / 1.5); 
+                        
+                        if (returnSvg) {
+                            svgStr += `<circle cx="${cx}" cy="${cy}" r="${finalOuterRadius.toFixed(2)}" fill="rgb(${haloRGB})" />`;
+                            svgStr += `<circle cx="${cx}" cy="${cy}" r="${innerRadius.toFixed(2)}" fill="rgb(${coreRGB})" />`;
+                        } else {
+                            targetCtx.fillStyle = `rgb(${haloRGB})`;
+                            targetCtx.beginPath();
+                            targetCtx.arc(finalX, finalY, finalOuterRadius, 0, Math.PI * 2);
+                            targetCtx.fill();
+                            
+                            targetCtx.fillStyle = `rgb(${coreRGB})`;
+                            targetCtx.beginPath();
+                            targetCtx.arc(finalX, finalY, innerRadius, 0, Math.PI * 2);
+                            targetCtx.fill();
+                        }
+                    } else if (dotStyle === 'solid') {
+                        if (returnSvg) {
+                            svgStr += `<circle cx="${cx}" cy="${cy}" r="${finalOuterRadius.toFixed(2)}" fill="rgb(${coreRGB})" />`;
+                        } else {
+                            targetCtx.fillStyle = `rgb(${coreRGB})`;
+                            targetCtx.beginPath();
+                            targetCtx.arc(finalX, finalY, finalOuterRadius, 0, Math.PI * 2);
+                            targetCtx.fill();
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (returnSvg) {
+            svgStr += `</svg>`;
+            return svgStr;
+        }
+    }
+
+    function renderEffect() {
+        if (!originalImage.src) return;
+        generateArt(ctx, canvas.width, canvas.height, false, false);
+    }
+
+    function downloadImage(format) {
+        if(!originalImage.src) return alert('请先上传图片');
+        const a = document.createElement('a');
+        const timestamp = Date.now();
+        
+        // 强制导出的最高A3级别精度 (300DPI下最长边约4960像素) 确保高分印刷不糊，兼容各大浏览器性能极值
+        const maxDim = 4960; 
+        const currentMax = Math.max(canvas.width, canvas.height);
+        const scale = Math.max(1, maxDim / currentMax);
+        
+        const expW = Math.floor(canvas.width * scale);
+        const expH = Math.floor(canvas.height * scale);
+        
+        // PNG和SVG输出支持去底透明环境
+        const isTransparent = (format === 'png' || format === 'svg');
+        
+        if (format === 'svg') {
+            const svgString = generateArt(null, expW, expH, isTransparent, true);
+            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            a.href = URL.createObjectURL(blob);
+            a.download = `art_pop_${timestamp}.svg`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 100);
+        } else {
+            const expCanvas = document.createElement('canvas');
+            expCanvas.width = expW;
+            expCanvas.height = expH;
+            const expCtx = expCanvas.getContext('2d');
+            
+            generateArt(expCtx, expW, expH, isTransparent, false);
+            
+            const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+            
+            // 使用 toBlob 替代 toDataUrl 解决 Mac Safari 早期版本对于超高分辨率 Base64 数据限制报错的问题，提升兼容性
+            expCanvas.toBlob((blob) => {
+                if (!blob) return alert('导出失败，请重试');
+                a.href = URL.createObjectURL(blob);
+                a.download = `art_pop_${timestamp}.${format}`;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 100);
+            }, mimeType, 1.0);
+        }
+    }
+</script>
+</body>
+</html>
+    
+  </body>
+  
+</html>
